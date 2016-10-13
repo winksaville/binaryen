@@ -68,6 +68,30 @@ struct BreakSeeker : public PostWalker<BreakSeeker, Visitor<BreakSeeker>> {
   }
 };
 
+// Finds all names in an expression
+
+struct NameCollector : public PostWalker<NameCollector, Visitor<NameCollector>> {
+  std::set<Name> names;
+
+  NameCollector() {}
+  NameCollector(Expression* tree) {
+    scan(tree);
+  }
+
+  void scan(Expression* tree) {
+    names.clear();
+    walk(tree);
+  }
+
+  void visitBlock(Block* curr) {
+    if (curr->name.is()) names.insert(curr->name);
+  }
+
+  void visitLoop(Loop* curr) {
+    if (curr->name.is()) names.insert(curr->name);
+  }
+};
+
 // Finds all functions that are reachable via direct calls.
 
 struct DirectCallGraphAnalyzer : public PostWalker<DirectCallGraphAnalyzer, Visitor<DirectCallGraphAnalyzer>> {

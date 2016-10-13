@@ -27,6 +27,7 @@ Pass *createCoalesceLocalsWithLearningPass();
 Pass *createDeadCodeEliminationPass();
 Pass *createDuplicateFunctionEliminationPass();
 Pass *createExtractFunctionPass();
+Pass *createFuzzPass();
 Pass *createFullPrinterPass();
 Pass *createLegalizeJSInterfacePass();
 Pass *createLowerIfElsePass();
