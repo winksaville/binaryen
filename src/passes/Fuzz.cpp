@@ -86,11 +86,31 @@ private:
   Expression* makeInt32() {
     Builder builder(*getModule());
     if (--limit == 0) return builder.makeUnreachable();
-    switch (pick()) {
-      case 0: return makeBlock(i32);
-      case 1: return builder.makeIf(makeInt32(), makeInt32(), makeInt32()); // XXX order of operations
-      case 2: return makeLoop(i32);
-      case 3: return makeBreak(makeInt32(), makeInt32());
+    switch (pick(Expression::NumExpressionIds)) {
+      case Expression::Id::InvalidId: return builder.makeUnreachable();
+      case Expression::Id::BlockId: return makeBlock(i32);
+      case Expression::Id::IfId: return builder.makeIf(makeInt32(), makeInt32(), makeInt32()); // XXX order of operations
+      case Expression::Id::LoopId: return makeLoop(i32);
+      case Expression::Id::BreakId: return makeBreak(makeInt32(), makeInt32());
+      case Expression::Id::SwitchId: return builder.makeUnreachable();
+      case Expression::Id::CallId: return makeCall(i32);
+      case Expression::Id::CallImportId: return makeCallImport(i32);
+      case Expression::Id::CallIndirectId: return makeCallIndirect(i32);
+      case Expression::Id::GetLocalId: return "get_local";
+      case Expression::Id::SetLocalId: return "set_local";
+      case Expression::Id::GetGlobalId: return "get_global";
+      case Expression::Id::SetGlobalId: return "set_global";
+      case Expression::Id::LoadId: return "load";
+      case Expression::Id::StoreId: return "store";
+      case Expression::Id::ConstId: return "const";
+      case Expression::Id::UnaryId: return "unary";
+      case Expression::Id::BinaryId: return "binary";
+      case Expression::Id::SelectId: return "select";
+      case Expression::Id::DropId: return "drop";
+      case Expression::Id::ReturnId: return "return";
+      case Expression::Id::HostId: return "host";
+      case Expression::Id::NopId: return "nop";
+      case Expression::Id::UnreachableId: return builder.makeUnreachable();
       default: WASM_UNREACHABLE();
     }
   }
@@ -123,9 +143,68 @@ private:
   Expression* makeBreak(Expression* value, Expression* condition) {
     Builder builder(*getModule());
     auto target = getBreakTarget(value);
-    if (target.is()) return builder.makeBreak(target, value, makeInt32());
-    return buid
+    if (target.is()) return builder.makeBreak(target, value, condition);
+    return builder.makeUnreachable();
   }
+
+  Expression* makeCall(WasmType type) {
+    std::vector<Function*> funcs;
+    for (auto& func : getModule()->functions) {
+      if (func->result == type) {
+        funcs.push_back(func.get());
+      }
+    }
+    Builder builder(*getModule());
+    if (funcs.empty()) return builder.makeUnreachable();
+    auto* func = funcs[pick(funcs.size())];
+    std::vector<Expression*> args;
+    for (auto param : func->params) {
+      args.push_back(make(param));
+    }
+    return builder.makeCall(func->name, args, type);
+  }
+
+  Expression* makeCallImport(WasmType type) {
+    std::vector<Function*> imports;
+    for (auto& import : getModule()->imports) {
+      if (import->kind != Import::Function) continue;
+      if (import->functionType->result == type) {
+        imports.push_back(import.get());
+      }
+    }
+    Builder builder(*getModule());
+    if (imports.empty()) return builder.makeUnreachable();
+    auto* import = imports[pick(imports.size())];
+    std::vector<Expression*> args;
+    for (auto param : import->functionType->params) {
+      args.push_back(make(param));
+    }
+    return builder.makeCallImport(import->name, args, type);
+  }
+
+  Expression* makeCallIndirect(WasmType type) {
+    auto& table = getModule()->table;
+    Builder builder(*getModule());
+    if (!table.exists) return builder.makeUnreachable();
+    std::vector<Function*> funcs;
+    for (auto& segment : table.segments) {
+      for (auto name : segment.data) {
+        auto* func = getModule()->getFunction(name);
+        if (func->result == type && func->type.is()) {
+          funcs.push_back(func.get());
+        }
+      }
+    }
+    if (funcs.empty()) return builder.makeUnreachable();
+    auto* func = funcs[pick(funcs.size())];
+    std::vector<Expression*> args;
+    for (auto param : func->params) {
+      args.push_back(make(param));
+    }
+    return builder.makeCallIndirect(func->type, makeInt32(), args, type);
+  }
+
+  // helpers
 
   Name getBreakTarget(Expression* value) {
     // find possible targets (including type, if we are breaking with a value), and pick one
