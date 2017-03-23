@@ -227,7 +227,7 @@ struct Block {
   wasm::Expression* SwitchCondition; // If nullptr, then this block ends in ifs (or nothing). otherwise, this block ends in a switch, done on this condition
   bool IsCheckedMultipleEntry; // If true, we are a multiple entry, so reaching us requires setting the label variable
 
-  Block(wasm::Expression* CodeInit, wasm::Expression* SwitchConditionInit = nullptr);
+  Block(wasm::Expression* CodeInit = nullptr, wasm::Expression* SwitchConditionInit = nullptr);
   ~Block();
 
   // Add a branch: if the condition holds we branch (or if null, we branch if all others failed)
