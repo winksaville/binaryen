@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 
+
 from scripts.test.support import run_command, split_wast
 from scripts.test.shared import (
     ASM2WASM, BIN_DIR, EMCC, MOZJS, NATIVECC, NATIVEXX, NODEJS, S2WASM_EXE,
