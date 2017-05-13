@@ -51,11 +51,13 @@ static void findImportsByBase(Module& wasm, Name base, std::function<void (Name)
 // Ensure a memory or table is of at least a size
 template<typename T>
 static void ensureSize(T& what, Index size) {
+  std::cout << "ensureSize:+ " << what.initial * what.kPageSize << " >= " << size << std::endl;
   // ensure the size is sufficient
   while (what.initial * what.kPageSize < size) {
     what.initial = what.initial + 1;
   }
   what.max = std::max(what.initial, what.max);
+  std::cout << "ensureSize:- what.initial=" << what.initial << " what.max=" << what.max << std::endl;
 }
 
 // A mergeable unit. This class contains basic logic to prepare for merging
@@ -122,15 +124,18 @@ struct Mergeable {
     findImportsByBase(wasm, MEMORY_BASE, [&](Name name) {
       memoryBaseGlobals.insert(name);
     });
-    if (memoryBaseGlobals.size() == 0) {
-      Fatal() << "no memory base was imported";
-    }
+    std::cout << "findImports: memoryBaseGlobals=" << memoryBaseGlobals.size() << std::endl;
+    //if (memoryBaseGlobals.size() == 0) {
+    //if (memoryBaseGlobals.size() == 0) {
+    //  Fatal() << "no memory base was imported";
+    //}
     findImportsByBase(wasm, TABLE_BASE, [&](Name name) {
       tableBaseGlobals.insert(name);
     });
-    if (tableBaseGlobals.size() == 0) {
-      Fatal() << "no table base was imported";
-    }
+    std::cout << "findImports: tableBaseGlobals=" << tableBaseGlobals.size() << std::endl;
+    //if (tableBaseGlobals.size() == 0) {
+    //  Fatal() << "no table base was imported";
+    //}
   }
 
   void standardizeSegments() {
@@ -172,6 +177,7 @@ struct Mergeable {
   // the end. this makes linking much simpler.
   template<typename T, typename U, typename Segment>
   void standardizeSegment(Module& wasm, T& what, Index size, U zero, Name globalName) {
+    std::cout << "strandardizeSegment:+ name=" << (globalName.is() ? globalName : "<no name>" ) << " size=" << size << std::endl;
     Segment* relocatable = nullptr;
     for (auto& segment : what.segments) {
       Expression* offset = segment.offset;
@@ -182,6 +188,7 @@ struct Mergeable {
       }
     }
     if (!relocatable) {
+      std::cout << "strandardizeSegment: none existing, add one" << std::endl;
       // none existing, add one
       what.segments.resize(what.segments.size() + 1);
       relocatable = &what.segments.back();
@@ -189,9 +196,11 @@ struct Mergeable {
     }
     // make sure it is the right size
     while (relocatable->data.size() < size) {
+      std::cout << "strandardizeSegment: make sure its " << size << " >= 0" << std::endl;
       relocatable->data.push_back(zero);
     }
     ensureSize(what, relocatable->data.size());
+    std::cout << "strandardizeSegment:- name=" << (globalName.is() ? globalName : "<no name>" ) << " size=" << size << std::endl;
   }
 
   // copies a relocatable segment from the input to the output
@@ -289,20 +298,24 @@ struct InputMergeable : public ExpressionStackWalker<InputMergeable, Visitor<Inp
   }
 
   void visitGetGlobal(GetGlobal* curr) {
-    auto iter = implementedGlobalImports.find(curr->name);
-    if (iter != implementedGlobalImports.end()) {
-      // this import is now in the module - use it
-      curr->name = iter->second;
-      return;
-    }
-    curr->name = gNames[curr->name];
-    assert(curr->name.is());
-    // if this is the memory or table base, add the bump
-    if (memoryBaseGlobals.count(curr->name)) {
-      addBump(outputMergeable.totalMemorySize);
-    } else if (tableBaseGlobals.count(curr->name)) {
-      addBump(outputMergeable.totalTableSize);
-    }
+    std::cout << " visitGetGlobal: find name=" << (curr->name.is() ? curr->name : "<no name>") << std::endl;
+    //if (curr->name.is()) {
+      auto iter = implementedGlobalImports.find(curr->name);
+      if (iter != implementedGlobalImports.end()) {
+        // this import is now in the module - use it
+        curr->name = iter->second;
+        return;
+      }
+      std::cout << " visitGetGlobal: not at end lookup name=" << (curr->name.is() ? curr->name : "<no name>") << " in gNames size=" << gNames.size() << std::endl;
+      curr->name = gNames[curr->name];
+      assert(curr->name.is());
+      // if this is the memory or table base, add the bump
+      if (memoryBaseGlobals.count(curr->name)) {
+        addBump(outputMergeable.totalMemorySize);
+      } else if (tableBaseGlobals.count(curr->name)) {
+        addBump(outputMergeable.totalTableSize);
+      }
+    //}
   }
 
   void visitSetGlobal(SetGlobal* curr) {
@@ -311,6 +324,7 @@ struct InputMergeable : public ExpressionStackWalker<InputMergeable, Visitor<Inp
   }
 
   void merge() {
+      std::cout << "merge:+" << std::endl;
     // find function imports in us that are implemented in the output
     // TODO make maps, avoid N^2
     for (auto& imp : wasm.imports) {
@@ -368,6 +382,7 @@ struct InputMergeable : public ExpressionStackWalker<InputMergeable, Visitor<Inp
 
     // update global names in input
     {
+      std::cout << "merge: update memoryBaseGlobal size=" << memoryBaseGlobals.size() << " gNames.size=" << gNames.size() << std::endl;
       auto temp = memoryBaseGlobals;
       memoryBaseGlobals.clear();
       for (auto x : temp) {
@@ -375,6 +390,7 @@ struct InputMergeable : public ExpressionStackWalker<InputMergeable, Visitor<Inp
       }
     }
     {
+      std::cout << "merge: update tableBaseGlobal size=" << tableBaseGlobals.size() << " gNames.size=" << gNames.size() << std::endl;
       auto temp = tableBaseGlobals;
       tableBaseGlobals.clear();
       for (auto x : temp) {
@@ -409,7 +425,9 @@ struct InputMergeable : public ExpressionStackWalker<InputMergeable, Visitor<Inp
     copySegment(outputMergeable.wasm.table, wasm.table, [&](Name x) -> Name { return fNames[x]; });
 
     // update the new contents about to be merged in
+    std::cout << "merge: walkModule $$$$$$$" << std::endl;
     walkModule(&wasm);
+    std::cout << "merge: walkModule done ******" << std::endl;
 
     // handle the dylink post-instantiate. this is special, as if it exists in both, we must in fact call both
     Name POST_INSTANTIATE("__post_instantiate");
@@ -465,6 +483,7 @@ struct InputMergeable : public ExpressionStackWalker<InputMergeable, Visitor<Inp
     for (auto& curr : wasm.globals) {
       outputMergeable.wasm.addGlobal(curr.release());
     }
+    std::cout << "merge:-" << std::endl;
   }
 
 private:
@@ -578,8 +597,10 @@ int main(int argc, const char* argv[]) {
   std::vector<std::unique_ptr<Module>> otherModules; // keep all inputs alive, to save copies
   bool first = true;
   for (auto& filename : filenames) {
+    std::cout << "top of loop file=" << filename << std::endl;
     ModuleReader reader;
     if (first) {
+      std::cout << "first file=" << filename << std::endl;
       // read the first right into output, don't waste time merging into an empty module
       try {
         reader.read(filename, output);
@@ -589,6 +610,7 @@ int main(int argc, const char* argv[]) {
       }
       first = false;
     } else {
+      std::cout << "not-first file=" << filename << std::endl;
       std::unique_ptr<Module> input = wasm::make_unique<Module>();
       try {
         reader.read(filename, *input);
@@ -597,12 +619,17 @@ int main(int argc, const char* argv[]) {
         Fatal() << "error in parsing input";
       }
       // perform the merge
+      std::cout << "create outputMereable file=" << filename << std::endl;
       OutputMergeable outputMergeable(output);
+      std::cout << "create inputMereable file=" << filename << std::endl;
       InputMergeable inputMergeable(*input, outputMergeable);
+      std::cout << "inputMereable.merge file=" << filename << std::endl;
       inputMergeable.merge();
       // retain the linked in module as we may depend on parts of it
+      std::cout << "push other modules file=" << filename << std::endl;
       otherModules.push_back(std::unique_ptr<Module>(input.release()));
     }
+    std::cout << "bottom of loop file=" << filename << std::endl;
   }
 
   if (verbose) {
@@ -634,6 +661,8 @@ int main(int argc, const char* argv[]) {
     ModuleWriter writer;
     writer.setDebug(options.debug);
     writer.setBinary(emitBinary);
+    std::cout << "write output" << std::endl;
     writer.write(output, options.extra["output"]);
+    std::cout << "write output done" << std::endl;
   }
 }
